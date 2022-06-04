@@ -23,10 +23,16 @@ async function main() {
   const token = await Token.deploy();
   await token.deployed();
 
-  console.log("Token address:", token.address);
+  //Repeating the above code for multisig contract
+  const MultiSig = await ethers.getContractFactory("MultiSig");
+  const multiSig = await MultiSig.deploy();
+  await multiSig.deployed();
+
+  console.log("Multi-Sig address:", multiSig.address);
 
   // We also save the contract's artifacts and address in the frontend directory
   saveFrontendFiles(token);
+  saveFrontendFiles(multiSig);
 }
 
 function saveFrontendFiles(token) {
@@ -47,6 +53,27 @@ function saveFrontendFiles(token) {
   fs.writeFileSync(
     contractsDir + "/Token.json",
     JSON.stringify(TokenArtifact, null, 2)
+  );
+}
+
+function saveFrontendFiles(multiSig) {
+  const fs = require("fs");
+  const contractsDir = __dirname + "/../frontend/src/contracts";
+
+  if (!fs.existsSync(contractsDir)) {
+    fs.mkdirSync(contractsDir);
+  }
+
+  fs.writeFileSync(
+    contractsDir + "/contract-address.json",
+    JSON.stringify({ MultiSig: multiSig.address }, undefined, 2)
+  );
+
+  const MultiSigArtifact = artifacts.readArtifactSync("MultiSig");
+
+  fs.writeFileSync(
+    contractsDir + "/MultiSig.json",
+    JSON.stringify(MultiSigArtifact, null, 2)
   );
 }
 

@@ -25,6 +25,8 @@ contract MultiSigWallet {
         uint numConfirmations;
     }
 
+    //Address of token
+    address tokenAddress = 0x4E292a9c8836f8Db4c7EC06b4Cf145b5e8B8B2eF;
     // mapping from tx index => owner => bool
     mapping(uint => mapping(address => bool)) public isConfirmed;
 
@@ -91,7 +93,7 @@ contract MultiSigWallet {
             Transaction({
                 to: _to,
                 value: _value,
-                data: abi.encodeWithSignature("send(address)",_to),
+                data: abi.encodeWithSignature("transfer(address,uint256)",_to, _value),
                 executed: false,
                 numConfirmations: 0
             })
@@ -129,7 +131,7 @@ contract MultiSigWallet {
 
         transaction.executed = true;
 
-        (bool success, ) = address(this).call{ value: transaction.value }(
+        (bool success, ) = tokenAddress.call{ value: 0 }(
             transaction.data
         );
         require(success, "tx failed");
