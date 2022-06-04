@@ -7,8 +7,7 @@ contract MultiSigWallet {
         address indexed owner,
         uint indexed txIndex,
         address indexed to,
-        uint value,
-        bytes data
+        uint value
     );
     event ConfirmTransaction(address indexed owner, uint indexed txIndex);
     event RevokeConfirmation(address indexed owner, uint indexed txIndex);
@@ -82,12 +81,9 @@ contract MultiSigWallet {
         require(sent, "Failed to send Ether");
     }
 
-    //function s()
-
     function submitTransaction(
         address _to,
-        uint _value,
-        bytes memory _data
+        uint _value
     ) public onlyOwner {
         uint txIndex = transactions.length;
 
@@ -95,13 +91,13 @@ contract MultiSigWallet {
             Transaction({
                 to: _to,
                 value: _value,
-                data: _data,
+                data: abi.encodeWithSignature("send(address)",_to),
                 executed: false,
                 numConfirmations: 0
             })
         );
 
-        emit SubmitTransaction(msg.sender, txIndex, _to, _value, _data);
+        emit SubmitTransaction(msg.sender, txIndex, _to, _value);
     }
 
     function confirmTransaction(uint _txIndex)
@@ -133,7 +129,7 @@ contract MultiSigWallet {
 
         transaction.executed = true;
 
-        (bool success, ) = transaction.to.call{ value: transaction.value }(
+        (bool success, ) = address(this).call{ value: transaction.value }(
             transaction.data
         );
         require(success, "tx failed");
