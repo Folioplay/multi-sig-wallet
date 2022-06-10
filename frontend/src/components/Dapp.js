@@ -6,6 +6,7 @@ import { ethers } from "ethers";
 // We import the contract's artifacts and address here, as we are going to be
 // using them with ethers
 import TokenArtifact from "../contracts/Token.json";
+import MultiSigArtifact from "../contracts/MultiSig.json"
 import contractAddress from "../contracts/contract-address.json";
 
 // All the logic of this dapp is contained in the Dapp component.
@@ -15,6 +16,7 @@ import { NoWalletDetected } from "./NoWalletDetected";
 import { ConnectWallet } from "./ConnectWallet";
 import { Loading } from "./Loading";
 import { Transfer } from "./Transfer";
+import { SubmitTxn } from "./SubmitTxn";
 import { TransactionErrorMessage } from "./TransactionErrorMessage";
 import { WaitingForTransactionMessage } from "./WaitingForTransactionMessage";
 import { NoTokensMessage } from "./NoTokensMessage";
@@ -54,6 +56,11 @@ export class Dapp extends React.Component {
       txBeingSent: undefined,
       transactionError: undefined,
       networkError: undefined,
+
+      //States for Multi Sig wallet
+      confirmations: undefined,
+      getOwners: [],
+      submitTxn: undefined
     };
 
     this.state = this.initialState;
@@ -95,7 +102,7 @@ export class Dapp extends React.Component {
         <div className="row">
           <div className="col-12">
             <h1>
-              {this.state.tokenData.name} ({this.state.tokenData.symbol})
+              {this.state.tokenData.name}({this.state.tokenData.symbol})
             </h1>
             <p>
               Welcome <b>{this.state.selectedAddress}</b>, you have{" "}
@@ -104,6 +111,7 @@ export class Dapp extends React.Component {
               </b>
               .
             </p>
+            <p>{this.state.confirmations}</p>
           </div>
         </div>
 
@@ -158,7 +166,46 @@ export class Dapp extends React.Component {
             )}
           </div>
         </div>
-      </div>
+        <div className="container p-4"></div>
+        <h1>Multi-Sig Wallet</h1>
+        <div className="row">
+          <div className="col-12">
+            {/* 
+              Sending a transaction isn't an immediate action. You have to wait
+              for it to be mined.
+              If we are waiting for one, we show a message here.
+            */}
+            {this.state.txBeingSent && (
+              <WaitingForTransactionMessage txHash={this.state.txBeingSent} />
+            )}
+
+            {/* 
+              Sending a transaction can fail in multiple ways. 
+              If that happened, we show a message here.
+            */}
+            {this.state.transactionError && (
+              <TransactionErrorMessage
+                message={this._getRpcErrorMessage(this.state.transactionError)}
+                dismiss={() => this._dismissTransactionError()}
+              />
+            )}
+          </div>
+        </div>
+        <div>
+          <h3>Owners are</h3>
+          {this.state.getOwners.map((x, key) => (
+              <p key={key}>{x}</p>
+          ))}
+        </div>
+        <div>
+          <h4>Number of Confirmations required: {this.state.confirmations}</h4>
+        <SubmitTxn
+          submitTransaction={(to, amount) =>
+          this._submitTransaction(to, amount)
+          }
+        />
+        </div>      
+      </div>     
     );
   }
 
@@ -222,6 +269,8 @@ export class Dapp extends React.Component {
     this._initializeEthers();
     this._getTokenData();
     this._startPollingData();
+    this._getConfirmations();
+    this._getOwners();
   }
 
   async _initializeEthers() {
@@ -234,6 +283,12 @@ export class Dapp extends React.Component {
       contractAddress.Token,
       TokenArtifact.abi,
       this._provider.getSigner(0)
+    );
+
+    this._multiSig = new ethers.Contract(
+      contractAddress.MultiSig,
+      MultiSigArtifact.abi,
+      this._provider.getSigner(0),   
     );
   }
 
@@ -366,5 +421,73 @@ export class Dapp extends React.Component {
     });
 
     return false;
+  }
+
+  async _getConfirmations() {
+    const confirmations = (await this._multiSig.numConfirmationsRequired()).toString();
+    // console.log(confirmations.toString())
+    this.setState({ confirmations });
+  }
+
+  async _getOwners() {
+    const getOwners = (await this._multiSig.getOwners());
+    this.setState({ getOwners: getOwners });
+  }
+
+  async _submitTransaction(to, amount) {
+    // Sending a transaction is a complex operation:
+    //   - The user can reject it
+    //   - It can fail before reaching the ethereum network (i.e. if the user
+    //     doesn't have ETH for paying for the tx's gas)
+    //   - It has to be mined, so it isn't immediately confirmed.
+    //     Note that some testing networks, like Hardhat Network, do mine
+    //     transactions immediately, but your dapp should be prepared for
+    //     other networks.
+    //   - It can fail once mined.
+    //
+    // This method handles all of those things, so keep reading to learn how to
+    // do it.
+
+    try {
+      // If a transaction fails, we save that error in the component's state.
+      // We only save one such error, so before sending a second transaction, we
+      // clear it.
+      this._dismissTransactionError();
+
+      // We send the transaction, and save its hash in the Dapp's state. This
+      // way we can indicate that we are waiting for it to be mined.
+      const tx = await this._multiSig.submitTransaction(to, amount);
+      this.setState({ txBeingSent: tx.hash });
+
+      // We use .wait() to wait for the transaction to be mined. This method
+      // returns the transaction's receipt.
+      const receipt = await tx.wait();
+
+      // The receipt, contains a status flag, which is 0 to indicate an error.
+      if (receipt.status === 0) {
+        // We can't know the exact error that made the transaction fail when it
+        // was mined, so we throw this generic one.
+        throw new Error("Transaction failed");
+      }
+
+      // If we got here, the transaction was successful, so you may want to
+      // update your state. Here, we update the user's balance.
+      await this._updateBalance();
+    } catch (error) {
+      // We check the error code to see if this error was produced because the
+      // user rejected a tx. If that's the case, we do nothing.
+      if (error.code === ERROR_CODE_TX_REJECTED_BY_USER) {
+        return;
+      }
+
+      // Other errors are logged and stored in the Dapp's state. This is used to
+      // show them to the user, and for debugging.
+      console.error(error);
+      this.setState({ transactionError: error });
+    } finally {
+      // If we leave the try/catch, we aren't sending a tx anymore, so we clear
+      // this part of the state.
+      this.setState({ txBeingSent: undefined });
+    }
   }
 }
