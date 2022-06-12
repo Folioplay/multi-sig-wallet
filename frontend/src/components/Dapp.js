@@ -20,6 +20,7 @@ import { SubmitTxn } from "./SubmitTxn";
 import { TransactionErrorMessage } from "./TransactionErrorMessage";
 import { WaitingForTransactionMessage } from "./WaitingForTransactionMessage";
 import { NoTokensMessage } from "./NoTokensMessage";
+import {TransactionDetails} from './TransactionDetails';
 
 // This is the Hardhat Network id, you might change it in the hardhat.config.js.
 // If you are using MetaMask, be sure to change the Network id to 1337.
@@ -60,7 +61,9 @@ export class Dapp extends React.Component {
       //States for Multi Sig wallet
       confirmations: undefined,
       getOwners: [],
-      submitTxn: undefined
+      submitTxn: undefined,
+      getTxn: [],
+      getTxnCount: undefined
     };
 
     this.state = this.initialState;
@@ -204,6 +207,7 @@ export class Dapp extends React.Component {
           this._submitTransaction(to, amount)
           }
         />
+        <TransactionDetails txn={this.state.getTxn}/>
         </div>      
       </div>     
     );
@@ -271,6 +275,8 @@ export class Dapp extends React.Component {
     this._startPollingData();
     this._getConfirmations();
     this._getOwners();
+    this._getTransactionCount();
+    this._getTransaction();
   }
 
   async _initializeEthers() {
@@ -430,8 +436,26 @@ export class Dapp extends React.Component {
   }
 
   async _getOwners() {
-    const getOwners = (await this._multiSig.getOwners());
-    this.setState({ getOwners: getOwners });
+    const getOwners = await this._multiSig.getOwners();
+    this.setState({ getOwners });
+  }
+
+  async _getTransactionCount() {
+    const getTxnCount = Number(await this._multiSig.getTransactionCount());
+    this.setState({ getTxnCount })
+    console.log(this.state.getTxnCount)
+  }
+
+  async _getTransaction() {
+    let getTxn = [];
+    const getTxnCount = Number(await this._multiSig.getTransactionCount());
+    for (let i = 0; i< getTxnCount; i++) {
+      console.log('value', i)
+      getTxn.push(await this._multiSig.getTransaction(i))
+      this.setState({ getTxn });
+    }
+    
+    console.log(getTxn, this.state.confirmations);
   }
 
   async _submitTransaction(to, amount) {
