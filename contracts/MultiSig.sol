@@ -26,7 +26,7 @@ contract MultiSig {
     }
 
     //Address of token
-    address tokenAddress = 0x4E292a9c8836f8Db4c7EC06b4Cf145b5e8B8B2eF;
+    address tokenAddress = 0x921fBAa41976e2b17fD3f27a5E0D6931Ba443B20;
     // mapping from tx index => owner => bool
     mapping(uint => mapping(address => bool)) public isConfirmed;
 
